@@ -15,7 +15,8 @@ import tqdm
 '''
 
 # file_path = r'D:\学习\研一\点云处理后数据集\csv'
-file_path = r'D:\software\PythonProject\Python\point-transformer2\dataset\csv'
+# file_path = r'D:\software\PythonProject\Python\point-transformer6\dataset\csv'
+file_path = r'D:\学习\研三\晶体性能预测\processed_data_csv'
 files = glob.glob(os.path.join(file_path, "*.csv"))        # 构建文件列表
 files.sort()                                               # 为文件排序
 print('文件列表files：', files)
@@ -150,8 +151,8 @@ def main(file, iteration):
 if __name__ == '__main__':
     case1 = True
     # case1 = False
-    case2 = True
-    # case2 = False
+    # case2 = True
+    case2 = False
     # case3 = True
     case3 = False
     '''
@@ -200,9 +201,9 @@ if __name__ == '__main__':
             # 设置pytorch中默认的浮点类型
             # torch.set_default_tensor_type(torch.FloatTensor)  # 设置torch.cuda.FloatTensor可将数据迁移至cuda
             # 保存训练集npy文件
-            np.save(f"D:\software\PythonProject\Python\point-transformer2\dataset\Area_2_conferenceRoom_{k+1}.npy", all_data)
+            np.save(f"D:\software\PythonProject\Python\point-transformer6\dataset\Area_2_conferenceRoom_{k+1}.npy", all_data)
             # 保存测试集npy文件
-            # np.save(f"D:\software\PythonProject\Python\point-transformer2\dataset\Area_5_conferenceRoom_{k+1}.npy", all_data)
+            # np.save(f"D:\software\PythonProject\Python\point-transformer6\dataset\Area_5_conferenceRoom_{k+1}.npy", all_data)
 
     '''
     情况2：生成一列的不同类型数据集，用作测试集(没打乱顺序)
@@ -219,7 +220,7 @@ if __name__ == '__main__':
 
             print(f'------------------------------------第{i+1}个文件--------------------------------------')
             print('all_data:', all_data)
-            np.save(f"D:\software\PythonProject\Python\point-transformer2\dataset\Area_5_conferenceRoom_{i}.npy",
+            np.save(f"D:\software\PythonProject\Python\point-transformer6\dataset\Area_5_conferenceRoom_{i}.npy",
                     all_data)
 
     '''
@@ -238,6 +239,6 @@ if __name__ == '__main__':
                     all_data = all_data.append(cut_data, ignore_index=True)
             print(f'------------------------------------第{iteration}个文件--------------------------------------')
             print('all_data:', all_data)
-            np.save(f"D:\software\PythonProject\Python\point-transformer2\dataset\Area_1_conferenceRoom_{iteration}.npy",
+            np.save(f"D:\software\PythonProject\Python\point-transformer6\dataset\Area_1_conferenceRoom_{iteration}.npy",
                     all_data)
             iteration += 1

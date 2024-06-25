@@ -46,6 +46,10 @@ class RandomRotate(object):
         return coord, feat, label
 
 
+"""
+这个类实现了随机缩放变换，可以对图像的坐标进行缩放。
+对feat的改变：如果feat代表图像的像素值，这个变换不会直接改变feat，因为缩放是针对坐标的。但如果feat代表的是与坐标相关的特征，比如图像的某些几何属性，那么缩放坐标可能间接影响这些特征。
+"""
 class RandomScale(object):
     def __init__(self, scale=[0.9, 1.1], anisotropic=False):
         self.scale = scale
@@ -93,6 +97,10 @@ class RandomJitter(object):
         return coord, feat, label
 
 
+"""
+这个类实现了自适应对比度增强，通过调整特征值的范围来增强图像的对比度。
+对feat的改变：这个变换会改变feat中的前5个通道（假设是RGB颜色通道）。通过计算最小值和最大值，然后使用这些值来调整对比度。如果blend_factor是随机的或由用户指定，那么原始特征和调整后的特征会以不同的比例混合。
+"""
 class ChromaticAutoContrast(object):
     def __init__(self, p=0.2, blend_factor=None):
         self.p = p
@@ -102,10 +110,15 @@ class ChromaticAutoContrast(object):
         if np.random.rand() < self.p:
             lo = np.min(feat, 0, keepdims=True)
             hi = np.max(feat, 0, keepdims=True)
-            scale = 255 / (hi - lo)
-            contrast_feat = (feat[:, :3] - lo) * scale
+            # scale = 255 / (hi - lo)
+            # contrast_feat = (feat[:, :5] - lo) * scale
+            # blend_factor = np.random.rand() if self.blend_factor is None else self.blend_factor
+            # feat[:, :5] = (1 - blend_factor) * feat[:, :5] + blend_factor * contrast_feat
+            scale = (hi - lo) / 255
+            scaled_feature = (feat - lo) / scale
             blend_factor = np.random.rand() if self.blend_factor is None else self.blend_factor
-            feat[:, :3] = (1 - blend_factor) * feat[:, :3] + blend_factor * contrast_feat
+            feat = (1 - blend_factor) * feat + blend_factor * scaled_feature
+
         return coord, feat, label
 
 
@@ -116,11 +129,15 @@ class ChromaticTranslation(object):
 
     def __call__(self, coord, feat, label):
         if np.random.rand() < self.p:
-            tr = (np.random.rand(1, 3) - 0.5) * 255 * 2 * self.ratio
-            feat[:, :3] = np.clip(tr + feat[:, :3], 0, 255)
+            tr = (np.random.rand(1, 4) - 0.5) * 255 * 2 * self.ratio
+            feat[:, :5] = np.clip(tr + feat[:, :5], 0, 255)
         return coord, feat, label
 
 
+"""
+这个类实现了颜色抖动，通过向特征添加随机噪声来模拟颜色变化。
+对feat的改变：这个变换只影响feat中的前5个通道。通过添加正态分布的噪声，并确保结果在0到31的范围内（这里假设每个通道的值范围是0到31，可能是某种归一化后的值），来模拟颜色的随机变化。
+"""
 class ChromaticJitter(object):
     def __init__(self, p=0.95, std=0.005):
         self.p = p
@@ -128,12 +145,16 @@ class ChromaticJitter(object):
 
     def __call__(self, coord, feat, label):
         if np.random.rand() < self.p:
-            noise = np.random.randn(feat.shape[0], 3)
-            noise *= self.std * 255
-            feat[:, :3] = np.clip(noise + feat[:, :3], 0, 255)
+            noise = np.random.randn(feat.shape[0], 5)
+            noise *= self.std  # noise *= self.std * 255
+            feat[:, :5] = np.clip(noise + feat[:, :5], 0, 31)
         return coord, feat, label
 
 
+"""
+这个类实现了色调和饱和度的变换，通过调整图像的颜色属性来增强数据多样性。
+对feat的改变：这个变换假设feat的前3个通道是RGB颜色值。通过将RGB转换为HSV颜色空间，然后随机调整色调和饱和度，最后再转换回RGB，来改变颜色属性。这个过程直接影响了feat中的RGB值。
+"""
 class HueSaturationTranslation(object):
     @staticmethod
     def rgb_to_hsv(rgb):

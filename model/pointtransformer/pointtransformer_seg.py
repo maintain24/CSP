@@ -145,11 +145,12 @@ class TransitionUp(nn.Module):
                 x_tmp.append(x_b)
             x = torch.cat(x_tmp, 0)
             x = self.linear1(x)
+            return p, x, o
         else:
-            p1, x1, o1 = pxo1;
+            p1, x1, o1 = pxo1
             p2, x2, o2 = pxo2
             x = self.linear1(x1) + pointops.interpolation(p2, p1, self.linear2(x2), o2, o1)
-        return x
+            return p1, x, o1
 
 
 class PointTransformerBlock(nn.Module):
@@ -202,7 +203,7 @@ class PointTransformerBlock2(nn.Module):
 
 
 class PointTransformerSeg(nn.Module):
-    def __init__(self, block, blocks, c=6, k=13):
+    def __init__(self, block, blocks, c=5, k=31):
         super().__init__()
         self.c = c
         self.in_planes, planes = c, [8, 8, 8, 8, 8]  # [32, 64, 128, 256, 512]  [8, 8, 16, 16, 32]
@@ -241,8 +242,9 @@ class PointTransformerSeg(nn.Module):
             layers.append(block(self.in_planes, self.in_planes, share_planes, nsample=nsample))
         return nn.Sequential(*layers)
 
-    def forward(self, pxo):
-        p0, x0, o0 = pxo  # (n, 3), (n, c), (b)
+    def forward(self, pxol):
+        p0, x0, o0, label = pxol  # (n, 3), (n, c), (b)
+        # print('label:', label)
         x0 = p0 if self.c == 3 else torch.cat((p0, x0), 1)
         p1, x1, o1 = self.enc1([p0, x0, o0])
         p2, x2, o2 = self.enc2([p1, x1, o1])
@@ -250,16 +252,20 @@ class PointTransformerSeg(nn.Module):
         p4, x4, o4 = self.enc4([p3, x3, o3])
         p5, x5, o5 = self.enc5([p4, x4, o4])
 
-        # x5 = self.dec5[1:]([p5, self.dec5[0]([p5, x5, o5]), o5])[1] # self.dec5[1:]([p5, self.dec5[0]([p5, x5, o5]), o5])[1]
-        x4_new = self.dec4[1:]([p4, self.dec4[0]([p4, x4, o4], [p5, x5, o5]), o4])[1] # self.dec4[1:]([p4, self.dec4[0]([p4, x4, o4], [p5, x5, o5]), o4])[1]
-        x3_new = self.dec3[1:]([p3, self.dec3[0]([p3, x3, o3], [p4, x4_new, o4]), o3])[1]
-        x2_new = self.dec2[1:]([p2, self.dec2[0]([p2, x2, o2], [p3, x3_new, o3]), o2])[1]
-        x1_new = self.dec1[1:]([p1, self.dec1[0]([p1, x1, o1], [p2, x2_new, o2]), o1])[1]
+        # x5 = self.dec5[1:]([p5, self.dec5[0]([p5, x5, o5]), o5]) # self.dec5[1:]([p5, self.dec5[0]([p5, x5, o5]), o5])[1]
+        p4_new, x4_new, o4_new = self.dec4[1:]([p4, self.dec4[0]([p4, x4, o4], [p5, x5, o5])[1], o4]) # self.dec4[1:]([p4, self.dec4[0]([p4, x4, o4], [p5, x5, o5]), o4])[1]
+        p3_new, x3_new, o3_new = self.dec3[1:]([p3, self.dec3[0]([p3, x3, o3], [p4, x4_new, o4])[1], o3])
+        p2_new, x2_new, o2_new = self.dec2[1:]([p2, self.dec2[0]([p2, x2, o2], [p3, x3_new, o3])[1], o2])
+        p1_new, x1_new, o1_new = self.dec1[1:]([p1, self.dec1[0]([p1, x1, o1], [p2, x2_new, o2])[1], o1])
         x = self.cls(x1_new)
+        # x = F.softmax(x, dim=1)  # 看情况是否添加softmax改为分类
+        # print("Output x feature dimension:", x.shape)  # (n,31)有多少类就有多少列
         # p = self.pcd_layer(x1)  # bs, 3, r * N, 1
         # p = p.squeeze(-1).transpose(1, 2).contiguous() # bs, 3, r * N
-        # return x
-        return p0, o0, p1, o1, p2, o2, p3, o3, p4, o4, p5, o5, x, x1, x1_new, x2, x2_new, x3, x3_new, x4, x4_new
+        # return x  # x是趋近于性能target的一维特征值
+        return p0, o0, p1, o1, p2, o2, p3, o3, p4, o4, p5, o5,\
+               p4_new, o4_new, p3_new, o3_new, p2_new, o2_new, p1_new, o1_new, \
+               x, x0, x1, x1_new, x2, x2_new, x3, x3_new, x4, x4_new, label  # 读取x0拼接在xyz_file最后
 
         # 原forward中的上采样，但只对特征张量x进行了上采样
         # p5, x5, o5 = self.dec5[1:]([p5, self.dec5[0]([p5, x5, o5]), o5])

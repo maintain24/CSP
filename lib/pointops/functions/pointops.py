@@ -161,7 +161,7 @@ class Aggregation(Function):
 aggregation = Aggregation.apply
 
 
-def interpolation(xyz, new_xyz, feat, offset, new_offset, k=3):
+def interpolation(xyz, new_xyz, feat, offset, new_offset, k=31):
     """
     input: xyz: (m, 3), new_xyz: (n, 3), feat: (m, c), offset: (b), new_offset: (b)
     output: (n, c)
@@ -180,7 +180,7 @@ def interpolation(xyz, new_xyz, feat, offset, new_offset, k=3):
 
 class Interpolation(Function):
     @staticmethod
-    def forward(ctx, xyz, new_xyz, input, offset, new_offset, k=3):
+    def forward(ctx, xyz, new_xyz, input, offset, new_offset, k=31):
         """
         input: xyz: (m, 3), new_xyz: (n, 3), input: (m, c), offset: (b), new_offset: (b)
         output: (n, c)

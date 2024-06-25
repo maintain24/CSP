@@ -190,8 +190,12 @@ def main_worker(gpu, ngpus_per_node, argss):
     颜色平移（ChromaticTranslation）、颜色抖动（ChromaticJitter）和色调饱和度平移（HueSaturationTranslation）。
     定义Dataset和DataLoader
     '''
-    train_transform = t.Compose([t.RandomScale([0.9, 1.1]), t.ChromaticAutoContrast(), t.ChromaticTranslation(), t.ChromaticJitter(), t.HueSaturationTranslation()])
+    # train_transform = t.Compose([t.RandomScale([0.9, 1.1]), t.ChromaticAutoContrast(), t.ChromaticTranslation(), t.ChromaticJitter(), t.HueSaturationTranslation()])
+    train_transform = t.Compose([t.RandomScale([0.9, 1.1])])
     train_data = S3DIS(split='train', data_root=args.data_root, test_area=args.test_area, voxel_size=args.voxel_size, voxel_max=args.voxel_max, transform=train_transform, shuffle_index=True, loop=args.loop)
+    print(f'Coordinates:\n{train_data[0][0]}')
+    print(f'Features:\n{train_data[0][1]}')
+    print(f'Labels:\n{train_data[0][2]}')
     if main_process():
         logger.info("train_data samples: '{}'".format(len(train_data)))
     if args.distributed:
@@ -204,6 +208,10 @@ def main_worker(gpu, ngpus_per_node, argss):
     if args.evaluate:
         val_transform = None
         val_data = S3DIS(split='val', data_root=args.data_root, test_area=args.test_area, voxel_size=args.voxel_size, voxel_max=800000, transform=val_transform)
+        # first_coord, first_feat, first_label = val_data[0]
+        # print(f"First sample coord shape: {first_coord.shape}")
+        # print(f"First sample feat shape: {first_feat.shape}")
+        # print(f"First sample label shape: {first_label.shape}")
         if args.distributed:
             val_sampler = torch.utils.data.distributed.DistributedSampler(val_data)
         else:
@@ -271,9 +279,15 @@ def train(train_loader, model, criterion, optimizer, epoch):
     end = time.time()
     max_iter = args.epochs * len(train_loader)
 
+    # 用来检查label是否超过n_classes
+    def check_labels_in_range(labels, n_classes=31):
+        if np.any(labels < 1) or np.any(labels > n_classes):
+            raise ValueError(f"标签值必须在1到{n_classes}之间，但得到了{labels.min()}到{labels.max()}。")
+
     filename = r'/mnt/Dataset/PT2_1/result/result.txt'
     xyz_file = r'/mnt/Dataset/PT2_1/result/coordinate.csv'  # 保存预测坐标数据集
-    x_file_dir = r'/mnt/Dataset/PT2_1/result'  # 保存预测坐标数据集
+    xyz_file_2 = r'/mnt/Dataset/PT2_1/result/coordinate_2.csv'  # 保存预测坐标数据集
+    x_file_dir = r'/mnt/Dataset/PT2_1/result'  # 保存下采样、上采样过程特征x数据集
     """保存中间变量的空ndarray"""
     p0_all = np.random.rand(0, 3)  # 创建空ndarray
     p2_all = np.random.rand(0, 3)
@@ -293,6 +307,19 @@ def train(train_loader, model, criterion, optimizer, epoch):
     x2_new_all = np.random.rand(0, 8)
     x3_new_all = np.random.rand(0, 8)
     x4_new_all = np.random.rand(0, 8)
+    x_all = np.random.rand(0, 31)
+    x0_all = np.random.rand(0, 8)
+
+    p4_new_all = np.random.rand(0, 3)  # 创建空ndarray
+    p3_new_all = np.random.rand(0, 3)
+    p2_new_all = np.random.rand(0, 3)
+    p1_new_all = np.random.rand(0, 3)
+    o4_new_all = np.random.rand(0)  # 保存collate_fn的offset标签
+    o3_new_all = np.random.rand(0)
+    o2_new_all = np.random.rand(0)
+    o1_new_all = np.random.rand(0)
+
+    label_all = np.random.rand(0)  # 保存性能标签
 
 
     with open(filename, 'a+') as f:
@@ -304,8 +331,10 @@ def train(train_loader, model, criterion, optimizer, epoch):
             输出变量增加，得到新output
             """
             # 试图输出更多的结果，但最后输出发现结果不尽人意
-            p0, o0, p1, o1, p2, o2, p3, o3, p4, o4, p5, o5, x, x1, x1_new, x2, x2_new, x3, x3_new, x4, x4_new\
-                = model([coord, feat, offset])  # (n, 3), (n, c), (b) -> (n, c)  # x = model([coord, feat, offset])
+            p0, o0, p1, o1, p2, o2, p3, o3, p4, o4, p5, o5, \
+            p4_new, o4_new, p3_new, o3_new, p2_new, o2_new, p1_new, o1_new, \
+            x, x0, x1, x1_new, x2, x2_new, x3, x3_new, x4, x4_new, label\
+                = model([coord, feat, offset, target])  # (n, 3), (n, c), (b) -> (n, c)  # x = model([coord, feat, offset])
             output = x  # 原output只输出一个元组x（n,c），output = model([coord, feat, offset])
 
             if i == epoch + 1:
@@ -321,7 +350,18 @@ def train(train_loader, model, criterion, optimizer, epoch):
                 o4_np = o4.detach().cpu().numpy()
                 o5_np = o5.detach().cpu().numpy()
 
-                p0_all = np.append(p0_all, p0_np, axis=0)
+                p4_new_np = p4_new.detach().cpu().numpy()  # 上采样过程坐标变化
+                p3_new_np = p3_new.detach().cpu().numpy()
+                p2_new_np = p2_new.detach().cpu().numpy()
+                p1_new_np = p1_new.detach().cpu().numpy()
+                o4_new_np = o4_new.detach().cpu().numpy()
+                o3_new_np = o3_new.detach().cpu().numpy()
+                o2_new_np = o2_new.detach().cpu().numpy()
+                o1_new_np = o1_new.detach().cpu().numpy()
+
+                label_np = label.detach().cpu().numpy()
+
+                p0_all = np.append(p0_all, p0_np, axis=0)  # 下采样过程
                 p2_all = np.append(p2_all, p2_np, axis=0)
                 p3_all = np.append(p3_all, p3_np, axis=0)
                 p4_all = np.append(p4_all, p4_np, axis=0)
@@ -332,6 +372,17 @@ def train(train_loader, model, criterion, optimizer, epoch):
                 o4_all = np.append(o4_all, o4_np, axis=0)
                 o5_all = np.append(o5_all, o5_np, axis=0)
 
+                p4_new_all = np.append(p4_new_all, p4_new_np, axis=0)  # 上采样过程
+                p3_new_all = np.append(p3_new_all, p3_new_np, axis=0)
+                p2_new_all = np.append(p2_new_all, p2_new_np, axis=0)
+                p1_new_all = np.append(p1_new_all, p1_new_np, axis=0)
+                o4_new_all = np.append(o4_new_all, o4_new_np, axis=0)
+                o3_new_all = np.append(o3_new_all, o3_new_np, axis=0)
+                o2_new_all = np.append(o2_new_all, o2_new_np, axis=0)
+                o1_new_all = np.append(o1_new_all, o1_new_np, axis=0)
+
+                label_all = np.append(label_all, label_np, axis=0)
+
                 """处理中间输出变量x和x_new"""
                 x1_np = x1.detach().cpu().numpy()  # 下采样过程特征变化
                 x1_new_np = x1_new.detach().cpu().numpy()
@@ -341,7 +392,13 @@ def train(train_loader, model, criterion, optimizer, epoch):
                 x3_new_np = x3_new.detach().cpu().numpy()
                 x4_np = x4.detach().cpu().numpy()
                 x4_new_np = x4_new.detach().cpu().numpy()
+                x_np = x.detach().cpu().numpy()
+                x0_np = x0.detach().cpu().numpy()
 
+                # check_labels_in_range(x_np)  # 检查x是否超过n_classes
+
+                x0_all = np.append(x0_all, x0_np, axis=0)
+                x_all = np.append(x_all, x_np, axis=0)
                 x1_all = np.append(x1_all, x1_np, axis=0)
                 x1_new_all = np.append(x1_new_all, x1_new_np, axis=0)
                 x2_all = np.append(x2_all, x2_np, axis=0)
@@ -422,6 +479,10 @@ def train(train_loader, model, criterion, optimizer, epoch):
                 writer.add_scalar('mAcc_train_batch', np.mean(intersection / (target + 1e-10)), current_iter)
                 writer.add_scalar('allAcc_train_batch', accuracy, current_iter)
 
+        """保存目标性能标签label，实则是target，用来在文件中分割得到目标分子结构"""
+        # 将每个ndarray数据转化为DataFrame格式
+        df0 = pd.DataFrame(label_all)
+
         """保存过程变量坐标p和偏移量o（又称结束索引）"""
         # 将每个ndarray数据转化为DataFrame格式
         df1 = pd.DataFrame(p0_all)
@@ -434,13 +495,16 @@ def train(train_loader, model, criterion, optimizer, epoch):
         df8 = pd.DataFrame(o4_all)
         df9 = pd.DataFrame(p5_all)
         df10 = pd.DataFrame(o5_all)
-        # 使用concat函数按列拼接这7个DataFrame
-        df = pd.concat([df1, df2, df3, df4, df5, df6, df7, df8, df9, df10], axis=1)
+        df10x0 = pd.DataFrame(x0_all)
+        print('df10x0:', df10x0)
+        # 使用concat函数按列拼接这10个DataFrame
+        df = pd.concat([df1, df10x0, df2, df0, df3, df4, df5, df6, df7, df8, df9, df10], axis=1)
         # 将拼接后的DataFrame保存到csv文件中
         df.to_csv(xyz_file, index=False, header=False)
 
         """保存特征张量x和x_new"""
         # 将每个ndarray数据转化为DataFrame格式
+        df10x = pd.DataFrame(x_all)
         df11 = pd.DataFrame(x1_all)
         df12 = pd.DataFrame(x1_new_all)
         df13 = pd.DataFrame(x2_all)
@@ -450,6 +514,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         df17 = pd.DataFrame(x4_all)
         df18 = pd.DataFrame(x4_new_all)
         # 将拼接后的DataFrame保存到csv文件中
+        df10x.to_csv("{}/{}.csv".format(x_file_dir, 'x'), index=False, header=False)
         df11.to_csv("{}/{}.csv".format(x_file_dir, 'x1'), index=False, header=False)
         df12.to_csv("{}/{}.csv".format(x_file_dir, 'x1_new'), index=False, header=False)
         df13.to_csv("{}/{}.csv".format(x_file_dir, 'x2'), index=False, header=False)
@@ -458,6 +523,21 @@ def train(train_loader, model, criterion, optimizer, epoch):
         df16.to_csv("{}/{}.csv".format(x_file_dir, 'x3_new'), index=False, header=False)
         df17.to_csv("{}/{}.csv".format(x_file_dir, 'x4'), index=False, header=False)
         df18.to_csv("{}/{}.csv".format(x_file_dir, 'x4_new'), index=False, header=False)
+
+        """保存下采样过程变量坐标p和偏移量o（又称结束索引）"""
+        # 将每个ndarray数据转化为DataFrame格式
+        df19 = pd.DataFrame(p4_new_all)
+        df20 = pd.DataFrame(o4_new_all)
+        df21 = pd.DataFrame(p3_new_all)
+        df22 = pd.DataFrame(o3_new_all)
+        df23 = pd.DataFrame(p2_new_all)
+        df24 = pd.DataFrame(o2_new_all)
+        df25 = pd.DataFrame(p1_new_all)
+        df26 = pd.DataFrame(o1_new_all)
+        # 使用concat函数按列拼接这7个DataFrame
+        df = pd.concat([df19, df20, df21, df22, df23, df24, df25, df26, df0, df10x], axis=1)
+        # 将拼接后的DataFrame保存到csv文件中
+        df.to_csv(xyz_file_2, index=False, header=False)
 
     iou_class = intersection_meter.sum / (union_meter.sum + 1e-10)
     accuracy_class = intersection_meter.sum / (target_meter.sum + 1e-10)
@@ -489,8 +569,10 @@ def validate(val_loader, model, criterion):
             target = target[:, 0]  # for cls
         with torch.no_grad():
             # 试图输出更多结果，但发现不尽人意
-            p0, o0, p1, o1, p2, o2, p3, o3, p4, o4, p5, o5, x, x1, x1_new, x2, x2_new, x3, x3_new, x4, x4_new\
-                = model([coord, feat, offset])  # output = model([coord, feat, offset]),但扩展为元组无法log_softmax
+            p0, o0, p1, o1, p2, o2, p3, o3, p4, o4, p5, o5, \
+            p4_new, o4_new, p3_new, o3_new, p2_new, o2_new, p1_new, o1_new, \
+            x, x0, x1, x1_new, x2, x2_new, x3, x3_new, x4, x4_new, label\
+                = model([coord, feat, offset, target])  # output = model([coord, feat, offset]),但扩展为元组无法log_softmax
             output = x
 
             # output = model([coord, feat, offset])

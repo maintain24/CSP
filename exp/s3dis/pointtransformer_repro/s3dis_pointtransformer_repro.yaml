@@ -2,8 +2,8 @@ DATA:
   data_name: s3dis
   data_root: dataset/s3dis/trainval_fullarea
   test_area: 5
-  classes: 13
-  fea_dim: 6
+  classes: 31
+  fea_dim: 8
   voxel_size: 0.04
   voxel_max: 80000
   loop: 30

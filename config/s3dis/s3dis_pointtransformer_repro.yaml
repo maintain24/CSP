@@ -3,8 +3,8 @@ DATA:
 #  data_root: dataset/s3dis/trainval_fullarea
   data_root: /mnt/Dataset/PT2_1
   test_area: 5
-  classes: 13
-  fea_dim: 6
+  classes: 31
+  fea_dim: 8
   voxel_size: 0.04
   voxel_max: 80000
   loop: 30
@@ -17,11 +17,11 @@ TRAIN:
 #  train_gpu: [0, 1, 2, 3]
   train_gpu: [0]
   workers: 6  # data loader workers, default = 16
-  batch_size: 8  # batch size for training, default = 16
-  batch_size_val: 4  # batch size for validation during training, memory and speed tradeoff
+  batch_size: 1  # batch size for training, default = 16
+  batch_size_val: 1  # batch size for validation during training, memory and speed tradeoff
   base_lr: 0.2
 #  epochs: 100 35
-  epochs: 5
+  epochs: 30
   start_epoch: 0
   step_epoch: 30
   multiplier: 0.1
@@ -48,7 +48,7 @@ TEST:
   test_list_full: dataset/s3dis/list/val5_full.txt
   split: val  # split in [train, val and test]
   test_gpu: [0]
-  test_workers: 6  # default = 4
+  test_workers: 4  # default = 4
   batch_size_test: 1  # default = 4
   model_path:
   save_folder:
