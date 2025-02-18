@@ -4,32 +4,33 @@ In this project, our team applied different machine learning algorithms with the
 
 
 ##  Data Preparation
+### Merge cif data and convert it into .npy file
 
-StackEdit stores your files in your browser, which means all your files are automatically saved locally and are accessible **offline!**
+python data_preprocessing.py
 
-## 进入指定文件夹CSP
+## Enter the specified folder CSP
 
 cd /mnt/pycharm_project_CSP
 
 ## train 
-### tool文件夹下的train.sh脚本
+### Run the training script
 
 >sh tool/train.sh s3dis CSP_repro
 
-###  挂后台训练并输出日志文件run.log到指定文件夹
+###  Hang in the background train and output the log file train.log to the specified folder
 
 >nohup sh tool/train.sh s3dis CSP_repro > /mnt/pycharm_project_CSP/dataset/run.log 2>&1 &
 
-### 或者选择在终端中监控日志内容：
+### Or choose to monitor the log content in the terminal
 
 >tail -f /mnt/pycharm_project_CSP/dataset/run.log
 
 ## Test
-### 可指定GPU，例如第0台GPU
+### Specify GPU debugging, such as GPU 0
 >CUDA_VISIBLE_DEVICES=0 sh tool/test.sh s3dis CSP_repro
 
-### 挂后台测试并输出日志文件test.log到指定文件夹
+### Hang in the background test and output the log file test.log to the specified folder
 >nohup sh tool/test.sh s3dis CSP_repro > /mnt/pycharm_project_CSP/dataset/test.log 2>&1 &
 
-### 或者直接在终端监控日志内容
+### Or choose to monitor the log content in the terminal
 >tail -f /mnt/pycharm_project_PT/dataset/test.log
